@@ -2,74 +2,72 @@
 #
 # Prerequisites:
 #   1. Build the adapter: bun run build
-#   2. Install to plugins directory: cp criteria-adapter-claude ~/.criteria/plugins/
-#   3. Set ANTHROPIC_API_KEY environment variable
+#   2. Install to plugins directory: cp out/adapter ~/.criteria/plugins/criteria-adapter-claude
+#   3. Set ANTHROPIC_API_KEY via the host secret provider (e.g. export ANTHROPIC_API_KEY=...)
 #
 # Run: criteria apply example.hcl
 
 workflow "code-review" {
-  version       = "0.1"
+  version       = "1.0"
   initial_state = "analyze"
   target_state  = "done"
+}
 
-  step "analyze" {
-    adapter = "claude"
+adapter "claude" "default" {
+  config {
+    model         = "claude-sonnet-4-6"
+    max_turns     = 10
+    max_tokens    = 4096
+    system_prompt = "You are a senior software engineer performing code reviews."
+  }
+}
 
-    # Agent-level config (applies to all steps in this agent block)
-    agent {
-      config {
-        model = "claude-sonnet-4-6"
-        max_turns = 10
-        max_tokens = 4096
-        system_prompt = "You are a senior software engineer performing code reviews."
-      }
-    }
+step "analyze" {
+  target = adapter.claude.default
 
-    # Step-level input
-    input {
-      prompt = "Review this code for security vulnerabilities: $(file src/main.ts)"
-      max_turns = 5
-    }
-
-    outcome "clean" {
-      transition_to = "deploy"
-    }
-
-    outcome "issues_found" {
-      transition_to = "fix"
-    }
-
-    outcome "failure" {
-      transition_to = "failed"
-    }
+  input {
+    prompt = "Review this code for security vulnerabilities: $(file src/main.ts)"
+    max_turns = 5
   }
 
-  step "fix" {
-    adapter = "claude"
-
-    input {
-      prompt = "Fix the security issues found in the previous step."
-    }
-
-    outcome "success" {
-      transition_to = "done"
-    }
-
-    outcome "failure" {
-      transition_to = "failed"
-    }
+  outcome "clean" {
+    next = state.deploy
   }
 
-  state "deploy" {
-    terminal = true
+  outcome "issues_found" {
+    next = state.fix
   }
 
-  state "done" {
-    terminal = true
+  outcome "failure" {
+    next = state.failed
+  }
+}
+
+step "fix" {
+  target = adapter.claude.default
+
+  input {
+    prompt = "Fix the security issues found in the previous step."
   }
 
-  state "failed" {
-    terminal = true
-    success  = false
+  outcome "success" {
+    next = state.done
   }
+
+  outcome "failure" {
+    next = state.failed
+  }
+}
+
+state "deploy" {
+  terminal = true
+}
+
+state "done" {
+  terminal = true
+}
+
+state "failed" {
+  terminal = true
+  success  = false
 }
