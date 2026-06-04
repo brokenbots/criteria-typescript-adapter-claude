@@ -25,6 +25,7 @@
  */
 
 import { serve } from "@criteria/adapter-sdk";
+import type { ServeConfig } from "@criteria/adapter-sdk";
 import Anthropic from "@anthropic-ai/sdk";
 
 // ============================================================================
@@ -91,11 +92,23 @@ function parseSubmitOutcomeArgs(raw: unknown): SubmitOutcomeArgs {
   };
 }
 
+function resolveNumber(val: unknown, fallback: number): number {
+  if (val === undefined || val === null) return fallback;
+  const n = typeof val === "number" ? val : Number(val);
+  return Number.isNaN(n) ? fallback : n;
+}
+
+function createClient(apiKey: string, baseURL?: string): Anthropic {
+  return new Anthropic({ apiKey, baseURL });
+}
+
+export { createClient };
+
 // ============================================================================
-// Main
+// Adapter configuration
 // ============================================================================
 
-serve({
+export const adapterConfig: ServeConfig = {
   name: "claude",
   version: "2.0.0",
   description: "Anthropic Claude adapter for Criteria workflows.",
@@ -186,15 +199,12 @@ serve({
 
     const baseURL = (await helpers.secrets.get("ANTHROPIC_BASE_URL")) ?? undefined;
 
-    const client = new Anthropic({
-      apiKey,
-      baseURL,
-    });
+    const client = createClient(apiKey, baseURL);
 
     const model = req.config.model || DEFAULT_MODEL;
-    const maxTurns = parseInt(req.config.max_turns, 10) || DEFAULT_MAX_TURNS;
-    const maxTokens = parseInt(req.config.max_tokens, 10) || DEFAULT_MAX_TOKENS;
-    const systemPrompt = buildSystemPrompt(req.config.system_prompt);
+    const maxTurns = resolveNumber(req.config.max_turns, DEFAULT_MAX_TURNS);
+    const maxTokens = resolveNumber(req.config.max_tokens, DEFAULT_MAX_TOKENS);
+    const systemPrompt = buildSystemPrompt(req.config.system_prompt as string | undefined);
 
     helpers.session.set("client", client);
     helpers.session.set("model", model);
@@ -213,16 +223,26 @@ serve({
       throw new Error("input.prompt is required");
     }
 
-    const client = helpers.session.get<Anthropic>("client");
+    let client = helpers.session.get<Anthropic>("client");
+    if (!client) {
+      const apiKey = await helpers.secrets.get("ANTHROPIC_API_KEY");
+      if (!apiKey) {
+        throw new Error("Anthropic API key is required. Set the ANTHROPIC_API_KEY secret.");
+      }
+      const baseURL = (await helpers.secrets.get("ANTHROPIC_BASE_URL")) ?? undefined;
+      client = createClient(apiKey, baseURL);
+      helpers.session.set("client", client);
+    }
+
     const model = req.input.model ?? helpers.session.get<string>("model") ?? DEFAULT_MODEL;
-    const maxTurns =
-      parseInt(req.input.max_turns, 10) ||
-      helpers.session.get<number>("maxTurns") ||
-      DEFAULT_MAX_TURNS;
-    const maxTokens =
-      parseInt(req.input.max_tokens, 10) ||
-      helpers.session.get<number>("maxTokens") ||
-      DEFAULT_MAX_TOKENS;
+    const maxTurns = resolveNumber(
+      req.input.max_turns,
+      helpers.session.get<number>("maxTurns") ?? DEFAULT_MAX_TURNS
+    );
+    const maxTokens = resolveNumber(
+      req.input.max_tokens,
+      helpers.session.get<number>("maxTokens") ?? DEFAULT_MAX_TOKENS
+    );
     const systemPrompt = helpers.session.get<string>("systemPrompt") ?? buildSystemPrompt();
 
     // Reset per-execution state
@@ -377,7 +397,7 @@ serve({
     helpers.session.set("messages", messages);
   },
 
-  async snapshot(sessionId, helpers) {
+  async snapshot(_sessionId, helpers) {
     const messages = helpers.session.get<Anthropic.MessageParam[]>("messages") ?? [];
     const state = {
       messages,
@@ -389,11 +409,11 @@ serve({
     };
     return {
       state: new TextEncoder().encode(JSON.stringify(state)),
-      schema_version: 1,
+      schemaVersion: 1,
     };
   },
 
-  async restore(sessionId, blob, helpers) {
+  async restore(_sessionId, blob, helpers) {
     const state = JSON.parse(new TextDecoder().decode(blob.state)) as {
       messages: Anthropic.MessageParam[];
       model: string;
@@ -403,6 +423,13 @@ serve({
       finalizeAttempts: number;
     };
 
+    const apiKey = await helpers.secrets.get("ANTHROPIC_API_KEY");
+    if (apiKey) {
+      const baseURL = (await helpers.secrets.get("ANTHROPIC_BASE_URL")) ?? undefined;
+      const client = createClient(apiKey, baseURL);
+      helpers.session.set("client", client);
+    }
+
     helpers.session.set("messages", state.messages);
     helpers.session.set("model", state.model);
     helpers.session.set("maxTurns", state.maxTurns);
@@ -411,7 +438,11 @@ serve({
     helpers.session.set("finalizeAttempts", state.finalizeAttempts);
   },
 
-  async closeSession(req, helpers) {
+  async closeSession(_req, helpers) {
     await helpers.log.stdout(`[claude] Session closed\n`);
   },
-});
+};
+
+if (import.meta.main) {
+  serve(adapterConfig);
+}
