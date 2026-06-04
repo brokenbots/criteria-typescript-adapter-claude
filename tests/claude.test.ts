@@ -123,7 +123,7 @@ describe("claude adapter", () => {
     const result = await host.execute({
       stepName: "analyze",
       input: { prompt: "Test prompt" },
-      allowedOutcomes: ["success", "failure", "needs_review"],
+      allowedOutcomes: ["success", "failure"],
     });
 
     expect(result.outcome).toBe("failure");
