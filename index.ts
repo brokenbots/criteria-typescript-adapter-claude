@@ -279,6 +279,9 @@ serve({
 
       for (const toolUse of toolUseBlocks) {
         if (toolUse.name === SUBMIT_OUTCOME_TOOL_NAME) {
+          const currentAttempts = helpers.session.get<number>("finalizeAttempts") ?? 0;
+          helpers.session.set("finalizeAttempts", currentAttempts + 1);
+
           let args: SubmitOutcomeArgs;
           try {
             args = parseSubmitOutcomeArgs(toolUse.input);
