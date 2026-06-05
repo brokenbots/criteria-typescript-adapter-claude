@@ -11,7 +11,7 @@
     "clean": "rm -rf out/"
   },
   "dependencies": {
-    "@criteria/adapter-sdk": "^2.0.0-rc.1",
+    "@criteria/adapter-sdk": "file:../criteria-typescript-adapter-sdk",
     "@anthropic-ai/sdk": "^0.39.0"
   }
 }
