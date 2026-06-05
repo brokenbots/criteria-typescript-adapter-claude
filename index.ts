@@ -110,7 +110,7 @@ export { createClient };
 
 export const adapterConfig: ServeConfig = {
   name: "claude",
-  version: "2.0.0",
+  version: "0.5.0",
   description: "Anthropic Claude adapter for Criteria workflows.",
   source_url: "https://github.com/criteria-adapters/claude",
   capabilities: ["multi_turn", "structured_events", "tool_calling"],
