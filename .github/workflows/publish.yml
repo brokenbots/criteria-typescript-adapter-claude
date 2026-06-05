@@ -60,6 +60,14 @@ jobs:
             echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: DEBUG emit-manifest
+        run: |
+          set +e
+          "${{ github.workspace }}/criteria-typescript-adapter-claude/out/adapter" --emit-manifest 1>/tmp/mf.out 2>/tmp/mf.err
+          echo "exit=$?"
+          echo "--- stdout ---"; head -40 /tmp/mf.out
+          echo "--- stderr ---"; head -40 /tmp/mf.err
+
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
