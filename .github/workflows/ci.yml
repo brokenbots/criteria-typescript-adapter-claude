@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout adapter
+        uses: actions/checkout@v4
+        with:
+          path: criteria-typescript-adapter-claude
+      - name: Checkout SDK (sibling file dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: brokenbots/criteria-typescript-adapter-sdk
+          path: criteria-typescript-adapter-sdk
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Build SDK
+        working-directory: criteria-typescript-adapter-sdk
+        run: bun install && bun run build
+      - name: Install & build adapter
+        working-directory: criteria-typescript-adapter-claude
+        run: bun install && bun run build
+      - name: Test
+        working-directory: criteria-typescript-adapter-claude
+        run: bun test
+
+  # WS49 — vulnerability gate (osv-scanner). BLOCKING: osv-scanner reads bun.lock
+  # and the tree is clean. A PR introducing a dependency with a known OSV advisory
+  # fails CI until upgraded or time-boxed in osv-scanner.toml. Pinned by SHA.
+  osv-scan:
+    name: Vulnerability scan (osv-scanner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run osv-scanner
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --config=osv-scanner.toml
+            --recursive
+            ./
+
+  # WS50 — non-blocking dependency-freshness report (`bun outdated`). Surfaces
+  # drift on every PR without flaking the build; enforcement stays with review.
+  deps-report:
+    name: Dependency freshness (report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: criteria-typescript-adapter-claude
+      - uses: actions/checkout@v4
+        with:
+          repository: brokenbots/criteria-typescript-adapter-sdk
+          path: criteria-typescript-adapter-sdk
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Build SDK
+        working-directory: criteria-typescript-adapter-sdk
+        run: bun install && bun run build
+      - name: Report outdated dependencies
+        working-directory: criteria-typescript-adapter-claude
+        run: |
+          bun install
+          {
+            echo '### Outdated dependencies (`bun outdated`)'
+            echo '```'
+            bun outdated || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  all-checks:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [build-test, osv-scan]
+    if: always()
+    steps:
+      - name: Verify required jobs succeeded
+        run: |
+          if [ "${{ needs.build-test.result }}" != "success" ]; then
+            echo "build-test did not succeed"; exit 1
+          fi
+          if [ "${{ needs.osv-scan.result }}" != "success" ]; then
+            echo "osv-scan did not succeed"; exit 1
+          fi

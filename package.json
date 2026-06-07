@@ -8,7 +8,9 @@
     "build:linux-arm64": "bun build --compile --target=bun-linux-arm64 index.ts --outfile out/adapter-linux-arm64",
     "build:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 index.ts --outfile out/adapter-darwin-arm64",
     "test": "bun test",
-    "clean": "rm -rf out/"
+    "vuln-scan": "osv-scanner scan source --config=osv-scanner.toml -r .",
+    "deps:outdated": "bun outdated",
+    "clean": "rm -rf out/ artifact/"
   },
   "dependencies": {
     "@criteria/adapter-sdk": "file:../criteria-typescript-adapter-sdk",
