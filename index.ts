@@ -112,7 +112,7 @@ export const adapterConfig: ServeConfig = {
   name: "claude",
   version: "0.5.0",
   description: "Anthropic Claude adapter for Criteria workflows.",
-  source_url: "https://github.com/criteria-adapters/claude",
+  source_url: "https://github.com/brokenbots/criteria-typescript-adapter-claude",
   capabilities: ["multi_turn", "structured_events", "tool_calling"],
   platforms: ["linux/amd64", "linux/arm64", "darwin/arm64"],
 
