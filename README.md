@@ -102,6 +102,26 @@ criteria apply workflow.hcl
 | `ANTHROPIC_API_KEY` | **Yes** | Anthropic API key |
 | `ANTHROPIC_BASE_URL` | No | Override the Anthropic API base URL |
 
+API keys arrive over the Criteria **secret channel** only — never read from the
+process environment.
+
+### Config overrides
+
+`model`, `max_turns`, and `max_tokens` exist in **both** the adapter `config {}`
+(session default) and step `input {}` (per-step override). A step input wins for
+that step only. `system_prompt` is session-scoped (set once at session open) and
+is not overridable per step.
+
+### Outputs
+
+| Output | Type | Description |
+|--------|------|-------------|
+| `reason` | string | Reason for the chosen outcome (from `submit_outcome`). |
+
+The step **outcome** is set by the model calling `submit_outcome(outcome, reason)`
+and is validated against the step's declared outcomes; assistant turns and tool
+calls are also emitted as structured events for observability.
+
 ## How It Works
 
 The adapter implements a multi-turn conversation loop:
@@ -121,6 +141,26 @@ const env = await helpers.secrets.spawnEnv(["ANTHROPIC_API_KEY"]);
 spawn("some-cli", [...], { env });
 ```
 
+## Security & dependencies
+
+Supply-chain controls and the dependency-freshness policy are documented in
+[SECURITY.md](SECURITY.md) and [docs/dependency-policy.md](docs/dependency-policy.md).
+Reproduce the CI security checks locally:
+
+```bash
+bun run vuln-scan      # osv-scanner — blocking known-vulnerability gate (reads bun.lock)
+bun run deps:outdated  # bun outdated — freshness report
+```
+
+## Publish
+
+Tagging `vX.Y.Z` runs [`.github/workflows/publish.yml`](.github/workflows/publish.yml),
+which cross-compiles `linux/amd64`, `linux/arm64`, and `darwin/arm64` with
+`bun build --compile --target=…` and publishes them as a single multi-platform,
+signed OCI artifact to `ghcr.io/brokenbots/criteria-adapter-claude:X.Y.Z` via the
+reusable [`brokenbots/publish-adapter`](https://github.com/brokenbots/publish-adapter)
+action. Pin and lock it in your workflow with `criteria adapter lock`.
+
 ## Development
 
 To modify the adapter:
@@ -128,4 +168,5 @@ To modify the adapter:
 1. Edit `index.ts`
 2. Rebuild: `bun run build`
 3. Run tests: `bun test`
-4. Test with `criteria apply`
+4. Run the security checks: `bun run vuln-scan`
+5. Test with `criteria apply`
